@@ -43,7 +43,6 @@ platform.
 # default output is 6 words chosen from the EFF 5-dice list
 #
 % longpass --count 5
-longpass --count 5
 mulch eraser sudden zestfully fit straw
 powdering saggy pep remorse humorous coral
 porthole crimp proxy footer splotchy language
