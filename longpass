@@ -1,181 +1,254 @@
-#!/usr/bin/env ruby
+#!/usr/bin/env python
+"""
+Diceware passphrase generator; not as secure as secretly rolling
+actual dice, but a lot more convenient, especially if you generate a
+bunch and pick *randomly* from the list.
+
+TODO: refactor variables for consistent concepts (pattern, rule,
+wordlist, etc)
+"""
+
+import argparse
+import collections
+import configparser
+import glob
+import math
+import os
+import random
+import re
+import secrets
+import textwrap
+
+
+def collapse(ary):
+    """catenate adjacent non-space elements in list"""
+    indices = [i for i in range(len(ary)) if ary[i] == ' ']
+    indices.append(len(ary))
+    tmp = []
+    start = 0
+    for i in indices:
+        tmp.append(''.join(result[start:i]))
+        start = i + 1
+    return(tmp)
+
+
+def force_mixed(r):
+    """if a string is not-mixed-case, up/down the first alpha character"""
+    if r.islower():
+        regex = re.compile("[a-z]")
+        s = regex.search(r)
+        if s:
+            r = r[: s.start()] + s.group().upper() + r[s.start()+1 :]
+    if r.isupper():
+        regex = re.compile("[A-Z]")
+        s = regex.search(r)
+        if s:
+            r = r[: s.start()] + s.group().lower() + r[s.start()+1 :]
+    return r
+
+
+libdir = os.path.join(os.path.expanduser("~"), "lib", "longpass")
+libext = ".txt"
+with open(os.path.join(libdir, "patterns.txt")) as f:
+    patterns = [i.rstrip() for i in f]
+
+
+def list_patterns():
+    """List all standard patterns"""
+    print("Predefined patterns:")
+    count = 0
+    for i in patterns:
+        count += 1
+        print("{:3d} {:s}".format(count, i))
+    print()
+
+
+def list_wordsets():
+    """List all wordsets and calculate their standard entropy"""
+    print("Available wordlists:")
+    print(" Count   Bits  Name")
+    list = glob.glob(os.path.join(libdir, "*.txt"))
+    list.sort()
+    for file in list:
+        name = re.sub('.txt$', '', os.path.basename(file))
+        if name == 'patterns':
+            continue
+        with open(file, "rb") as f:
+            count = sum(1 for _ in f)
+            print('{:6d} {:6.2f}  {:s}'.format(count, math.log2(count), name))
+
+
+parser = argparse.ArgumentParser(
+    prog='longpass',
+    formatter_class = argparse.RawDescriptionHelpFormatter,
+    description = """
+        Generate strong passwords and passphrases using flexible patterns
+        and wordlists. Uses the "secrets" library to ensure the best
+        random-number generator available on your platform.
+    """,
+    epilog = textwrap.dedent("""
+        Examples:
+            longpass
+                returns 10 6-word passphrases using the EFF 5-dice list.
+                "ninth racoon entrap fraying alias unfair"
+
+            longpass -c20 -p"a-b a-b a-b" adj noun
+                returns 20 three-compound-word passphrases.
+                "fond-cream spicy-loom safe-echo"
+
+            longpass -s -e -m -p11 alphanum punct var op digit
+                returns 10 5-word passphrases combining five wordlists,
+                shuffled for a few bits of extra entropy, guaranteed to
+                contain both upper and lower-case letters. Also prints the
+                estimated entropy at the beginning of each line.
+                "107.48 7"KK Z-67 .EF9 Kd^Y v4a:"
+
+            longpass -c1 -p8 -j- hex
+                return a string of four 4-digit lower-case hex numbers
+                separated by dashes.
+                "1c2a-385a-3d6a-4c66"
+    """))
+parser.add_argument('-c', '--count',
+    default = 10,
+    type = int,
+    help = 'Number of passwords to generate')
+parser.add_argument('-e', '--entropy',
+    action = 'store_true',
+    help = 'Display estimated bits of entropy for the passwords')
+parser.add_argument('-j', '--joinchar',
+    default = ' ',
+    help = 'Insert separator between items')
+parser.add_argument('-l', '--list',
+    action = 'store_true',
+    help = 'List predefined patterns and available wordlists')
+parser.add_argument('-m', '--mixed',
+    action = 'store_true',
+    help = 'Ensure mixed-case passwords to meet obsolete \
+        security requirements.')
+parser.add_argument('-p', '--pattern',
+    default = 'a a a a a a',
+    help = """
+        Either a number indicating which predefined pattern to use, or a
+        pattern consisting of wordlists a, b, c, etc. Any characters that
+        do not match supplied wordlists will be printed literally in the
+        generated passwords.
+    """)
+parser.add_argument('-r', '--ruleset',
+    help = 'Use named ruleset from ~/.longpass (in ConfigParser format,\
+        with no default)')
+parser.add_argument('-R', '--rulesets',
+    action = 'store_true',
+    help = 'List all rulesets defined in ~/.longpass')
+parser.add_argument('-s', '--shuffle',
+    action = 'store_true',
+    help = 'Shuffle words in password, possibly adding entropy')
+parser.add_argument('wordlists',
+    nargs = '*',
+    default = ['eff5'],
+    metavar = 'wordfile[,wordfile...]',
+    help="""
+        comma-separated list of filenames containing words to choose from;
+        each argument goes into a separate wordlist named a, b, etc.
+    """)
+args=parser.parse_args()
+
+if args.list:
+    list_patterns()
+    list_wordsets()
+    exit()
+
+config = configparser.RawConfigParser()
+dot_config = os.path.join(os.path.expanduser("~"), ".longpass") 
+if os.path.isfile(dot_config):
+    config.read(dot_config)
+    if args.ruleset in config:
+        d = config[args.ruleset]
+        if 'count' in d:
+            args.count = int(d['count'])
+        if 'joinchar' in d:
+            args.joinchar = d['joinchar']
+        if 'mixed' in d:
+            args.mixed = True
+        if 'pattern' in d:
+            args.pattern = d['pattern']
+        if 'shuffle' in d:
+            args.shuffle = True
+        if 'wordlists' in d:
+            args.wordlists = d['wordlists'].split(" ")
+    else:
+        if args.ruleset:
+            print("Ruleset '{:s}' not found in ~/.longpass"
+                .format(args.ruleset))
+            exit()
+
+if args.rulesets:
+    print("Defined rulesets:")
+    for i in config.sections():
+        print(" ",i)
+    exit()
+
+if args.pattern.isnumeric():
+    try:
+        args.pattern = patterns[int(args.pattern) - 1]
+    except:
+        print("Invalid pattern '{:s}'".format(args.pattern))
+        exit()
+
+# each wordlist argument is a comma-separated list of filenames to
+# be imported into arrays a, b, c, etc.
 #
-# Diceware passphrase generator; not as secure as secretly
-# rolling actual dice, but a lot more convenient, especially
-# if you generate a bunch and pick from the list.
+rule = {}
+i = chr(96)
+for wordlist in args.wordlists:
+    i = chr(ord(i)+1)
+    rule[i] = []
+    for file in wordlist.split(","):
+        # TODO: support search paths (current dir, /usr/local/lib, ~/lib, etc)
+        if "." in file:
+            path = file
+        else:
+            path = os.path.join(libdir, file) + ".txt"
+        with open(path) as f:
+            for line in f:
+                # allow diceware files containing "NNN\tWORD"
+                word = line.rstrip().split("\t").pop()
+                if len(word) == 0:
+                    word=' '
+                rule[i].append(word)
 
-# ruleset is a TOML-format file containing at least two arrays,
-# one named 'patterns' and one with a single-character name.
-# To generate a passphrase, for each character in a pattern,
-# if it's the name of an array, use a random member, otherwise
-# insert it literally.
+pattern_elements = [ c for c in args.pattern ]
 
-require 'json'
-require 'toml-rb'
-require 'optparse'
-require 'sysrandom'
+if args.entropy:
+    entropy = 0
+    for i in pattern_elements:
+        entropy += math.log2(len(rule.get(i, i)))
+    # https://en.wikipedia.org/wiki/Permutation#Permutations_of_multisets
+    if args.shuffle:
+        count = collections.Counter(args.pattern.split(" "))
+        a = math.factorial(count.total())
+        b = 1;
+        for k,v in count.most_common():
+            b *= math.factorial(v)
+        entropy += math.log2(a / b);
 
-# for some reason sysrandom doesn't offer a rand() method,
-# which prevents it from being used in place of Random for
-# things like shuffle()
-#
-module Sysrandom
-	alias_method :random_number, :rand
-	module_function :rand
-end
+# "rule.get(i,i)" self-inserts any character that is not the
+# name of an in-use dict
+# 
+for c in range(args.count):
+    result = []
+    for i in pattern_elements:
+        result.append(secrets.choice(rule.get(i, i)))
+    result = collapse(result)
 
-def make_pass(pattern,rulesets)
-	result=''
-	i=0
-	pattern.each_char { |char|
-		rules = rulesets[i]
-		if rules[char]
-			len = rules[char].length
-			result += rules[char].sample(random: Sysrandom)
-			i = (i + 1) % rulesets.length
-		else
-			result += char
-		end
-	}
-	return result.split(' ')
-end
+    if args.shuffle:
+        random.shuffle(result)
 
-def entropy_calc(pattern,rulesets)
-	entropy = 0
-	i = 0
-	pattern.each_char { |char|
-		rules = rulesets[i]
-		if rules[char]
-			entropy += Math.log(rules[char].length, 2)
-			i = (i + 1) % rulesets.length
-		end
-	}
-	if $options[:shuffle] and pattern.split(' ').uniq.length > 1
-		entropy += Math.log(pattern.count(' ') + 1, 2)
-	end
-	return entropy
-end
+    r = args.joinchar.join(result)
 
-def ruleset_info(r)
-	puts "Ruleset: #{r["filename"]}"
-	puts "Array Sizes:"
-	r.keys.sort.each { |k|
-		next if ["patterns", "filename"].include?(k)
-		printf("   %s %d\n",k,r[k].length)
-	}
-	puts "Patterns:"
-	i = 1
-	r["patterns"].each { |p|
-		printf("  %2d (%6.2f): %s\n",i,entropy_calc(p,[r]),p);
-		i += 1
-	}
-end
+    if args.mixed:
+        r = force_mixed(r)
 
-$options = {
-	:count => 10,
-	:entropy => false,
-	:list => false,
-	:pattern => '',
-	:shuffle => false,
-}
-usage = ''
-usage2 = <<EOF
+    if args.entropy:
+        print('{:.2f}'.format(entropy), end=' ')
 
-The default pattern in the supplied rulesets has at least 80 bits of
-entropy. I recommend that you use one of the stronger patterns, and
-remember half of it and write the other half on a card in your wallet.
-
-If multiple rulesets are supplied, it will select the pattern from the
-first one and then select elements from each ruleset in turn. The
-effective entropy is higher than the estimate, especially if you use
-the shuffle option.
-EOF
-OptionParser.new('', 24, '  ') { |opts|
-	opts.banner = "Usage: #{$0} [options] ruleset ...\n\n"
-	opts.on("-cCOUNT", "--count COUNT",
-		"generate COUNT passphrases") { |o|
-		$options[:count] = o.to_i
-	}
-	opts.on("-e", "--entropy",
-		"calculate the entropy for the current pattern") {
-		$options[:entropy] = true
-	}
-	opts.on("-l", "--list",
-		"list the available patterns in the rulesets") {
-		$options[:list] = true
-	}
-	opts.on("-pPATTERN", "--pattern PATTERN",
-		"select a pattern by number, or supply your own") { |o|
-		$options[:pattern] = o
-	}
-	opts.on("-s", "--shuffle",
-		"randomly reorder the output words") {
-		$options[:shuffle] = true
-	}
-	opts.on("-h","--help", "show this help text") {
-		puts opts.to_s + usage2
-		exit 0
-	}
-	usage = opts.to_s + usage2
-}.parse!
-if ARGV.length == 0
-	puts usage
-	$stderr.puts "Error: no ruleset supplied on command line"
-	exit 1
-end
-
-rulesets = []
-ARGV.each { |arg|
-	cache="cache/#{arg}"
-	if File.exist?(cache) and File.mtime(arg) <= File.mtime(cache)
-		ruleset = JSON.load(File.read(cache))
-	else
-		begin
-			ruleset = TomlRB.load_file(arg)
-		rescue Exception => e
-			$stderr.puts "Error: '#{arg}': #{e.message}"
-			exit 1
-		end
-		ruleset["filename"] = arg
-		File.open(cache, 'wb') {|f| f.write(JSON.dump(ruleset))}
-	end
-	rulesets.push(ruleset)
-}
-
-if $options[:list]
-	rulesets.each { |r|
-		ruleset_info(r)
-		puts
-	}
-	puts "Random printable ASCII passwords (6.57 bits/char):"
-	[8, 10, 12, 14, 16, 18].each { |l|
-		printf("  %2d=%.2f", l, l * Math.log(95, 2))
-	}
-	puts
-	exit 0
-end
-
-patterns = rulesets[0]["patterns"]
-pattern = patterns[0]
-if $options[:pattern].empty? == false
-	if $options[:pattern].match?(/^\d+$/)
-		if (1..patterns.length) === $options[:pattern].to_i
-			pattern = patterns[$options[:pattern].to_i - 1]
-		else
-			puts usage
-			$stderr.puts "Error: pattern #{$options[:pattern]} out of range"
-			exit 1
-		end
-	else
-		pattern = $options[:pattern]
-	end
-end
-
-entropy = entropy_calc(pattern,rulesets)
-(1..$options[:count]).each { |i|
-	printf("%7.2f\t",entropy) if $options[:entropy]
-	out = make_pass(pattern,rulesets)
-	out.shuffle!(random: Sysrandom) if $options[:shuffle]
-	puts out.join(' ')
-}
-exit 0
+    print(r)
