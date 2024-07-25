@@ -117,12 +117,12 @@ Available wordlists:
 
 # does the exact same thing using a recipe from `~/.longpass`
 #
-% longpass -r spunky -c 5
-Q-65 rB<U 7@8b 9B9@ .efh
-Z=86 ;Tzy jhD: Rd?b f+RT
-7as^ /uQP Q-64 K!bY c8!e
-En't C/26 7&nT KuQ$ ,6Nx
-t<b5 )7uA gKb) MC+h C*93
+% longpass -r spunky -c 5 -e
+107.48 Q-65 rB<U 7@8b 9B9@ .efh
+107.48 Z=86 ;Tzy jhD: Rd?b f+RT
+107.48 7as^ /uQP Q-64 K!bY c8!e
+107.48 En't C/26 7&nT KuQ$ ,6Nx
+107.48 t<b5 )7uA gKb) MC+h C*93
 
 # lists all recipes defined in `~/.longpass`
 #
