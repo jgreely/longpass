@@ -17,7 +17,7 @@ platform.
 * `longpass` -- Python script to generate strong wordlist-based
   passphrases that follow a defined pattern. Can be installed anywhere.
 
-* `lib/longpass/*.txt -- a wide variety of wordlists, both short and
+* `lib/longpass/*.txt` -- a wide variety of wordlists, both short and
   long, as well as the list of pre-defined patterns in `patterns.txt`.
   Script only looks for them in `~/lib/longpass` at the moment.
 
