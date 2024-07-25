@@ -134,7 +134,7 @@ Defined rulesets:
   longhex
   smorg
 
-# mixes 11 different rulesets to create 9-word passphrases that
+# mixes 11 different wordlists to create 9-word passphrases that
 # should be long and strong enough for anyone (~127 bits of entropy).
 #
 % longpass -r smorg -c 3
