@@ -78,6 +78,17 @@ def list_wordsets():
             print('{:6d} {:6.2f}  {:s}'.format(count, math.log2(count), name))
 
 
+def respace(r):
+    """Randomly insert spaces after removing any that are already present"""
+    stripped = r.replace(' ', '')
+    a = []
+    while len(stripped) >= 4:
+        n = random.randint(2, min(6, int(len(stripped) / 2)))
+        a.append(stripped[0 : n])
+        stripped = stripped[n :]
+    a.append(stripped)
+    return(' '.join(a), len(a) - 1)
+
 parser = argparse.ArgumentParser(
     prog='longpass',
     formatter_class = argparse.RawDescriptionHelpFormatter,
@@ -142,6 +153,13 @@ parser.add_argument('-R', '--rulesets',
 parser.add_argument('-s', '--shuffle',
     action = 'store_true',
     help = 'Shuffle words in password, possibly adding entropy')
+parser.add_argument('-S', '--spaces',
+    action = 'store_true',
+    help = """
+        After all other options have been processed, strip out all
+        space characters and insert new ones at random, creating
+        words of 2-5 characters
+    """)
 parser.add_argument('wordlists',
     nargs = '*',
     default = ['eff5'],
@@ -248,7 +266,12 @@ for c in range(args.count):
     if args.mixed:
         r = force_mixed(r)
 
+    extra_entropy = 0
+    if args.spaces:
+        r, e = respace(r)
+        extra_entropy += math.log2(e)
+
     if args.entropy:
-        print('{:.2f}'.format(entropy), end=' ')
+        print('{:.2f}'.format(entropy + extra_entropy), end=' ')
 
     print(r)
