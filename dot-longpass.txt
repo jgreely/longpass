@@ -11,6 +11,12 @@ mixed = true
 pattern = aaab aaba abaa baaa cdee
 wordlists = alphanum punct var op digit
 
+[spunkier]
+shuffle = true
+mixed = true
+pattern = aaaa aaab aaba abaa baaa cdee
+wordlists = alphanum punct var op digit
+
 [shorthex]
 pattern = aaaa aaaa
 wordlists = hex

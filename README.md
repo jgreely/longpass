@@ -151,6 +151,8 @@ sys     0m0.200s
 
 ## Notes
 
+* Currently only looks for wordlists in ~/lib/longpass
+
 * This package has included material from the JMdict (EDICT, etc.)
   dictionary files in accordance with the licence provisions of the
   Electronic Dictionaries Research Group. See
