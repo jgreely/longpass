@@ -158,7 +158,7 @@ parser.add_argument('-S', '--spaces',
     help = """
         After all other options have been processed, strip out all
         space characters and insert new ones at random, creating
-        words of 2-5 characters
+        words of 2-6 characters
     """)
 parser.add_argument('wordlists',
     nargs = '*',
