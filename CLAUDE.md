@@ -21,7 +21,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Patterns** (`longpass_data/patterns.txt`): Pre-defined templates where letters (a, b, c, etc.) represent wordlist positions, and any other character is inserted literally.
 
-- **Configuration** (`~/.longpass`): Optional ConfigParser-format file defining named rulesets that bundle pattern + wordlist + options.
+- **Default Rulesets** (`longpass_data/default-rulesets.txt`): Bundled default rulesets in ConfigParser format. Used as fallback when `~/.longpass` doesn't exist.
+
+- **Configuration** (`~/.longpass`): Optional ConfigParser-format file defining named rulesets that bundle pattern + wordlist + options. If this file doesn't exist, the bundled default rulesets are used automatically.
 
 ### Key Design Patterns
 
@@ -34,6 +36,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 4. **Mixed-case enforcement**: The `force_mixed()` function ensures at least one uppercase and one lowercase letter by toggling the first alpha character if needed - addresses legacy security requirements.
 
 5. **Data file location**: The `get_data_dir()` function (longpass.py:58-69) checks for package data first using `importlib.resources`, then falls back to `~/lib/longpass/` for backward compatibility.
+
+6. **Default rulesets fallback**: The `get_default_rulesets_content()` function (longpass.py:72-87) loads bundled default rulesets from `longpass_data/default-rulesets.txt`. When `~/.longpass` doesn't exist, these defaults are automatically loaded, allowing users to use rulesets like `-r smorg` without any setup.
 
 ## Development Commands
 
@@ -61,13 +65,6 @@ pip install .
 pip install -e .
 ```
 
-### Traditional Installation (Makefile)
-```bash
-make install
-# Installs to ~/bin/longpass and ~/lib/longpass/*
-# Optionally: cp dot-longpass.txt ~/.longpass
-```
-
 ### Testing the Script
 ```bash
 # Basic test: generate default passphrases
@@ -80,7 +77,8 @@ python3 longpass.py -l  # list all patterns and wordlists
 python3 longpass.py -c 5 -p "a-b a-b" adj noun
 
 # Test ruleset functionality
-python3 longpass.py -R  # list rulesets (requires ~/.longpass)
+python3 longpass.py -R  # list rulesets (uses bundled defaults if no ~/.longpass)
+python3 longpass.py --default-rulesets  # display bundled default rulesets
 python3 longpass.py -r spunky -c 3  # use a ruleset
 
 # Test entropy calculation
@@ -105,7 +103,8 @@ time python3 longpass.py -c 100000 eff5 > /dev/null
 - **Pattern elements**: `collapse()` function concatenates non-space elements, allowing patterns like "aaaa" to pick 4 chars and join them
 - **Shuffle entropy**: When `-s` is used, additional entropy from permutations is calculated using multiset combinatorics
 - **ConfigParser format**: The `~/.longpass` file uses INI-style sections with lowercase option names
+- **Default rulesets**: If `~/.longpass` doesn't exist, bundled defaults from `longpass_data/default-rulesets.txt` are used automatically. Users can view them with `--default-rulesets` and copy to `~/.longpass` to customize.
 - **Package structure**:
   - `longpass.py`: Main script with `main()` entry point
-  - `longpass_data/`: Python package containing all wordlist .txt files
+  - `longpass_data/`: Python package containing all wordlist .txt files and default-rulesets.txt
   - `pyproject.toml`: Poetry configuration defining packages and dependencies

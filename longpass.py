@@ -69,6 +69,24 @@ def get_data_dir():
     return Path.home() / "lib" / "longpass"
 
 
+def get_default_rulesets_content():
+    """Get the content of the default rulesets file from package data"""
+    try:
+        pkg_data = files('longpass_data')
+        default_rulesets_file = pkg_data.joinpath('default-rulesets.txt')
+        if default_rulesets_file.is_file():
+            return default_rulesets_file.read_text()
+    except (ImportError, TypeError, AttributeError):
+        pass
+
+    # If package data not available, try to read from source directory
+    fallback_path = Path(__file__).parent / 'longpass_data' / 'default-rulesets.txt'
+    if fallback_path.exists():
+        return fallback_path.read_text()
+
+    return None
+
+
 def list_patterns(patterns):
     """List all standard patterns"""
     print("Predefined patterns:")
@@ -183,6 +201,9 @@ def main():
     parser.add_argument('-R', '--rulesets',
         action = 'store_true',
         help = 'List all rulesets defined in ~/.longpass')
+    parser.add_argument('--default-rulesets',
+        action = 'store_true',
+        help = 'Display the default rulesets bundled with longpass')
     parser.add_argument('-s', '--shuffle',
         action = 'store_true',
         help = 'Shuffle words in password, possibly adding entropy')
@@ -208,32 +229,55 @@ def main():
         list_wordsets(libdir)
         return
 
+    # Handle --default-rulesets option
+    if args.default_rulesets:
+        default_content = get_default_rulesets_content()
+        if default_content:
+            print("Default rulesets (copy to ~/.longpass or use as template):")
+            print("=" * 70)
+            print(default_content)
+        else:
+            print("Error: Could not load default rulesets", file=sys.stderr)
+        return
+
     config = configparser.RawConfigParser()
     dot_config = os.path.join(os.path.expanduser("~"), ".longpass")
+
+    # Load user config if it exists, otherwise load defaults
     if os.path.isfile(dot_config):
         config.read(dot_config)
-        if args.ruleset in config:
-            d = config[args.ruleset]
-            if 'count' in d:
-                args.count = int(d['count'])
-            if 'joinchar' in d:
-                args.joinchar = d['joinchar']
-            if 'mixed' in d:
-                args.mixed = True
-            if 'pattern' in d:
-                args.pattern = d['pattern']
-            if 'shuffle' in d:
-                args.shuffle = True
-            if 'wordlists' in d:
-                args.wordlists = d['wordlists'].split(" ")
-        else:
-            if args.ruleset:
-                print("Ruleset '{:s}' not found in ~/.longpass"
-                    .format(args.ruleset))
-                return
+    else:
+        # Load default rulesets as fallback
+        default_content = get_default_rulesets_content()
+        if default_content:
+            config.read_string(default_content)
+
+    if args.ruleset in config:
+        d = config[args.ruleset]
+        if 'count' in d:
+            args.count = int(d['count'])
+        if 'joinchar' in d:
+            args.joinchar = d['joinchar']
+        if 'mixed' in d:
+            args.mixed = True
+        if 'pattern' in d:
+            args.pattern = d['pattern']
+        if 'shuffle' in d:
+            args.shuffle = True
+        if 'wordlists' in d:
+            args.wordlists = d['wordlists'].split(" ")
+    else:
+        if args.ruleset:
+            print("Ruleset '{:s}' not found in ~/.longpass or default rulesets"
+                .format(args.ruleset))
+            return
 
     if args.rulesets:
         print("Defined rulesets:")
+        if os.path.isfile(dot_config):
+            print(" (from ~/.longpass)")
+        else:
+            print(" (using bundled defaults - create ~/.longpass to customize)")
         for i in config.sections():
             print(" ",i)
         return

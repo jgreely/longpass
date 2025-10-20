@@ -1,0 +1,36 @@
+[easy]
+pattern = a-b a-b a-b cdee
+wordlists = adj noun var op digit
+shuffle = true
+count = 20
+mixed = true
+
+[spunky]
+shuffle = true
+mixed = true
+pattern = aaab aaba abaa baaa cdee
+wordlists = alphanum punct var op digit
+
+[spunkier]
+shuffle = true
+mixed = true
+pattern = aaaa aaab aaba abaa baaa cdee
+wordlists = alphanum punct var op digit
+
+[shorthex]
+pattern = aaaa aaaa
+wordlists = hex
+joinchar = :
+
+[longhex]
+# for testing only; relies on pattern 8 containing:
+#   "aaaa aaaa aaaa aaaa"
+pattern = 8
+joinchar = -
+wordlists = hex
+
+[smorg]
+pattern = a b c d efgg hhhh i j k
+mixed = true
+shuffle = true
+wordlists = eff5 adj noun german var op digit alphanum us-sur us-fem us-male

@@ -117,18 +117,30 @@ Available wordlists:
 107.48 En't C/26 7&nT KuQ$ ,6Nx
 107.48 t<b5 )7uA gKb) MC+h C*93
 
-# lists all recipes defined in `~/.longpass`
+# lists all recipes defined in `~/.longpass` (or bundled defaults)
 #
 % longpass -R
 Defined rulesets:
   easy
   spunky
+  spunkier
   shorthex
   longhex
   smorg
 
+# display the default rulesets bundled with longpass
+#
+% longpass --default-rulesets
+Default rulesets (copy to ~/.longpass or use as template):
+======================================================================
+[easy]
+pattern = a-b a-b a-b cdee
+wordlists = adj noun var op digit
+...
+
 # mixes 11 different wordlists to create 9-word passphrases that
 # should be long and strong enough for anyone (~127 bits of entropy).
+# Note: rulesets work even without ~/.longpass, using bundled defaults
 #
 % longpass -r smorg -c 3
 stilt campen TcVG A/02 priscilla refract patrick bloated ellis
