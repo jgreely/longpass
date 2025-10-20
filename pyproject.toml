@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "longpass"
-version = "1.0.0"
+version = "1.0.1"
 description = "Rule-based passphrase generator with custom Diceware-style wordlists"
 authors = ["J Greely"]
 license = "MIT"
