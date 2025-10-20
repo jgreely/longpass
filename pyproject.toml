@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "longpass"
+version = "1.0.0"
+description = "Rule-based passphrase generator with custom Diceware-style wordlists"
+authors = ["J Greely"]
+license = "MIT"
+readme = "README.md"
+packages = [
+    {include = "longpass.py"},
+    {include = "longpass_data"}
+]
+homepage = "https://github.com/jgreely/longpass"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+importlib-resources = {version = "^5.0", python = "<3.9"}
+
+[tool.poetry.scripts]
+longpass = "longpass:main"
+
+[tool.poetry.group.dev.dependencies]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

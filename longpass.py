@@ -1,0 +1,314 @@
+#!/usr/bin/env python
+"""
+Diceware passphrase generator; not as secure as secretly rolling
+actual dice, but a lot more convenient, especially if you generate a
+bunch and pick *randomly* from the list.
+
+TODO: refactor variables for consistent concepts (pattern, rule,
+wordlist, etc)
+"""
+
+import argparse
+import collections
+import configparser
+import glob
+import math
+import os
+import random
+import re
+import secrets
+import sys
+import textwrap
+from pathlib import Path
+
+try:
+    from importlib.resources import files
+except ImportError:
+    # Python < 3.9 fallback
+    from importlib_resources import files
+
+
+def collapse(ary):
+    """catenate adjacent non-space elements in list"""
+    indices = [i for i in range(len(ary)) if ary[i] == ' ']
+    indices.append(len(ary))
+    tmp = []
+    start = 0
+    for i in indices:
+        tmp.append(''.join(ary[start:i]))
+        start = i + 1
+    return(tmp)
+
+
+def force_mixed(r):
+    """if a string is not-mixed-case, up/down the first alpha character"""
+    if r.islower():
+        regex = re.compile("[a-z]")
+        s = regex.search(r)
+        if s:
+            r = r[: s.start()] + s.group().upper() + r[s.start()+1 :]
+    if r.isupper():
+        regex = re.compile("[A-Z]")
+        s = regex.search(r)
+        if s:
+            r = r[: s.start()] + s.group().lower() + r[s.start()+1 :]
+    return r
+
+
+def get_data_dir():
+    """Get the data directory for wordlists, checking package location first, then user home"""
+    # Try to find package data files
+    try:
+        pkg_data = files('longpass_data')
+        if pkg_data.joinpath('patterns.txt').is_file():
+            return Path(str(pkg_data))
+    except (ImportError, TypeError, AttributeError):
+        pass
+
+    # Fall back to user's home directory
+    return Path.home() / "lib" / "longpass"
+
+
+def list_patterns(patterns):
+    """List all standard patterns"""
+    print("Predefined patterns:")
+    count = 0
+    for i in patterns:
+        count += 1
+        print("{:3d} {:s}".format(count, i))
+    print()
+
+
+def list_wordsets(libdir):
+    """List all wordsets and calculate their standard entropy"""
+    print("Available wordlists:")
+    print(" Count   Bits  Name")
+    list = glob.glob(str(libdir / "*.txt"))
+    list.sort()
+    for file in list:
+        name = re.sub('.txt$', '', os.path.basename(file))
+        if name == 'patterns':
+            continue
+        with open(file, "rb") as f:
+            count = sum(1 for _ in f)
+            print('{:6d} {:6.2f}  {:s}'.format(count, math.log2(count), name))
+
+
+def respace(r):
+    """Randomly insert spaces after removing any that are already present"""
+    stripped = r.replace(' ', '')
+    a = []
+    while len(stripped) >= 4:
+        n = random.randint(2, min(6, int(len(stripped) / 2)))
+        a.append(stripped[0 : n])
+        stripped = stripped[n :]
+    a.append(stripped)
+    return(' '.join(a), len(a) - 1)
+
+
+def main():
+    """Main entry point for the longpass script"""
+
+    # Get data directory and load patterns
+    libdir = get_data_dir()
+    libext = ".txt"
+
+    patterns_file = libdir / "patterns.txt"
+    if not patterns_file.exists():
+        print(f"Error: Cannot find patterns.txt in {libdir}", file=sys.stderr)
+        print("Please ensure wordlist data files are installed.", file=sys.stderr)
+        sys.exit(1)
+
+    with open(patterns_file) as f:
+        patterns = [i.rstrip() for i in f]
+
+    parser = argparse.ArgumentParser(
+        prog='longpass',
+        formatter_class = argparse.RawDescriptionHelpFormatter,
+        description = """
+            Generate strong passwords and passphrases using flexible patterns
+            and wordlists. Uses the "secrets" library to ensure the best
+            random-number generator available on your platform.
+        """,
+        epilog = textwrap.dedent("""
+            Examples:
+                longpass
+                    returns 10 6-word passphrases using the EFF 5-dice list.
+                    "ninth racoon entrap fraying alias unfair"
+
+                longpass -c20 -p"a-b a-b a-b" adj noun
+                    returns 20 three-compound-word passphrases.
+                    "fond-cream spicy-loom safe-echo"
+
+                longpass -s -e -m -p11 alphanum punct var op digit
+                    returns 10 5-word passphrases combining five wordlists,
+                    shuffled for a few bits of extra entropy, guaranteed to
+                    contain both upper and lower-case letters. Also prints the
+                    estimated entropy at the beginning of each line.
+                    "107.48 7"KK Z-67 .EF9 Kd^Y v4a:"
+
+                longpass -c1 -p8 -j- hex
+                    return a string of four 4-digit lower-case hex numbers
+                    separated by dashes.
+                    "1c2a-385a-3d6a-4c66"
+        """))
+    parser.add_argument('-c', '--count',
+        default = 10,
+        type = int,
+        help = 'Number of passwords to generate')
+    parser.add_argument('-e', '--entropy',
+        action = 'store_true',
+        help = 'Display estimated bits of entropy for the passwords')
+    parser.add_argument('-j', '--joinchar',
+        default = ' ',
+        help = 'Insert separator between items')
+    parser.add_argument('-l', '--list',
+        action = 'store_true',
+        help = 'List predefined patterns and available wordlists')
+    parser.add_argument('-m', '--mixed',
+        action = 'store_true',
+        help = 'Ensure mixed-case passwords to meet obsolete \
+            security requirements.')
+    parser.add_argument('-p', '--pattern',
+        default = 'a a a a a a',
+        help = """
+            Either a number indicating which predefined pattern to use, or a
+            pattern consisting of wordlists a, b, c, etc. Any characters that
+            do not match supplied wordlists will be printed literally in the
+            generated passwords.
+        """)
+    parser.add_argument('-r', '--ruleset',
+        help = 'Use named ruleset from ~/.longpass (in ConfigParser format,\
+            with no default)')
+    parser.add_argument('-R', '--rulesets',
+        action = 'store_true',
+        help = 'List all rulesets defined in ~/.longpass')
+    parser.add_argument('-s', '--shuffle',
+        action = 'store_true',
+        help = 'Shuffle words in password, possibly adding entropy')
+    parser.add_argument('-S', '--spaces',
+        action = 'store_true',
+        help = """
+            After all other options have been processed, strip out all
+            space characters and insert new ones at random, creating
+            words of 2-6 characters
+        """)
+    parser.add_argument('wordlists',
+        nargs = '*',
+        default = ['eff5'],
+        metavar = 'wordfile[,wordfile...]',
+        help="""
+            comma-separated list of filenames containing words to choose from;
+            each argument goes into a separate wordlist named a, b, etc.
+        """)
+    args=parser.parse_args()
+
+    if args.list:
+        list_patterns(patterns)
+        list_wordsets(libdir)
+        return
+
+    config = configparser.RawConfigParser()
+    dot_config = os.path.join(os.path.expanduser("~"), ".longpass")
+    if os.path.isfile(dot_config):
+        config.read(dot_config)
+        if args.ruleset in config:
+            d = config[args.ruleset]
+            if 'count' in d:
+                args.count = int(d['count'])
+            if 'joinchar' in d:
+                args.joinchar = d['joinchar']
+            if 'mixed' in d:
+                args.mixed = True
+            if 'pattern' in d:
+                args.pattern = d['pattern']
+            if 'shuffle' in d:
+                args.shuffle = True
+            if 'wordlists' in d:
+                args.wordlists = d['wordlists'].split(" ")
+        else:
+            if args.ruleset:
+                print("Ruleset '{:s}' not found in ~/.longpass"
+                    .format(args.ruleset))
+                return
+
+    if args.rulesets:
+        print("Defined rulesets:")
+        for i in config.sections():
+            print(" ",i)
+        return
+
+    if args.pattern.isnumeric():
+        try:
+            args.pattern = patterns[int(args.pattern) - 1]
+        except:
+            print("Invalid pattern '{:s}'".format(args.pattern))
+            return
+
+    # each wordlist argument is a comma-separated list of filenames to
+    # be imported into arrays a, b, c, etc.
+    #
+    rule = {}
+    i = chr(96)
+    for wordlist in args.wordlists:
+        i = chr(ord(i)+1)
+        rule[i] = []
+        for file in wordlist.split(","):
+            # TODO: support search paths (current dir, /usr/local/lib, ~/lib, etc)
+            if "." in file:
+                path = file
+            else:
+                path = str(libdir / (file + ".txt"))
+            with open(path) as f:
+                for line in f:
+                    # allow diceware files containing "NNN\tWORD"
+                    word = line.rstrip().split("\t").pop()
+                    if len(word) == 0:
+                        word=' '
+                    rule[i].append(word)
+
+    pattern_elements = [ c for c in args.pattern ]
+
+    if args.entropy:
+        entropy = 0
+        for i in pattern_elements:
+            entropy += math.log2(len(rule.get(i, i)))
+        # https://en.wikipedia.org/wiki/Permutation#Permutations_of_multisets
+        if args.shuffle:
+            count = collections.Counter(args.pattern.split(" "))
+            a = math.factorial(count.total())
+            b = 1;
+            for k,v in count.most_common():
+                b *= math.factorial(v)
+            entropy += math.log2(a / b);
+
+    # "rule.get(i,i)" self-inserts any character that is not the
+    # name of an in-use dict
+    #
+    for c in range(args.count):
+        result = []
+        for i in pattern_elements:
+            result.append(secrets.choice(rule.get(i, i)))
+        result = collapse(result)
+
+        if args.shuffle:
+            random.shuffle(result)
+
+        r = args.joinchar.join(result)
+
+        if args.mixed:
+            r = force_mixed(r)
+
+        extra_entropy = 0
+        if args.spaces:
+            r, e = respace(r)
+            extra_entropy += math.log2(e)
+
+        if args.entropy:
+            print('{:.2f}'.format(entropy + extra_entropy), end=' ')
+
+        print(r)
+
+
+if __name__ == '__main__':
+    main()

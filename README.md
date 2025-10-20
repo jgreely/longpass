@@ -30,13 +30,6 @@ platform.
 * `make-japanese.rb` -- extracts common non-katakana words from JMDict_e
   for use as a wordlist.
 
-### Obsolete Ruby version
-
-* `longpass.rb` -- mostly the same functionality, but required caching
-  due to the overhead of TOML parsing in Ruby.
-
-* `rulesets/*` -- TOML rulesets for the Ruby version.
-
 ## Usage
 
 ```

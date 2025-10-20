@@ -4,20 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`longpass` is a rule-based passphrase generator that creates strong passphrases using custom Diceware-style wordlists. It's implemented as a single Python script that uses the `secrets` module for cryptographically-secure random number generation.
+`longpass` is a rule-based passphrase generator that creates strong passphrases using custom Diceware-style wordlists. It's packaged using Poetry and can be installed as a Python package.
 
 ## Architecture
 
 ### Core Components
 
-- **`longpass`** (lines 1-278): Main Python script with three key responsibilities:
+- **`longpass.py`**: Main Python script with three key responsibilities:
   1. Pattern processing: Translates patterns like "a a a a" into wordlist selections
-  2. Wordlist management: Loads and combines multiple wordlists from `~/lib/longpass/`
+  2. Wordlist management: Loads and combines multiple wordlists from the `longpass_data` package or `~/lib/longpass/`
   3. Passphrase generation: Uses `secrets.choice()` for secure randomness
 
-- **Wordlists** (`lib/longpass/*.txt`): Each file contains one word/token per line. Some support Diceware format with "NUMBER\tWORD" (tab-separated), which the script handles by extracting just the word portion.
+- **`longpass_data/`**: Python package containing wordlist data files. Each file contains one word/token per line. Some support Diceware format with "NUMBER\tWORD" (tab-separated), which the script handles by extracting just the word portion.
 
-- **Patterns** (`lib/longpass/patterns.txt`): Pre-defined templates where letters (a, b, c, etc.) represent wordlist positions, and any other character is inserted literally.
+- **Wordlists** (`longpass_data/*.txt`): The data files are packaged with the Python module and accessed via `importlib.resources`. Falls back to `~/lib/longpass/` if package data is not found.
+
+- **Patterns** (`longpass_data/patterns.txt`): Pre-defined templates where letters (a, b, c, etc.) represent wordlist positions, and any other character is inserted literally.
 
 - **Configuration** (`~/.longpass`): Optional ConfigParser-format file defining named rulesets that bundle pattern + wordlist + options.
 
@@ -25,15 +27,41 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 1. **Pattern-to-wordlist mapping**: Command-line wordlist arguments map sequentially to letters a, b, c, etc. Pattern "a a b" with wordlists `noun adj` means: pick from noun twice, then pick from adj once.
 
-2. **Character passthrough**: In `longpass:253-258`, any pattern character not in the `rule` dict is inserted literally (e.g., "-" or ":" in patterns becomes a literal separator).
+2. **Character passthrough**: In the main loop, any pattern character not in the `rule` dict is inserted literally (e.g., "-" or ":" in patterns becomes a literal separator).
 
-3. **Entropy calculation**: When `-e` flag is used, entropy is calculated from wordlist sizes and shuffle permutations (lines 239-250).
+3. **Entropy calculation**: When `-e` flag is used, entropy is calculated from wordlist sizes and shuffle permutations.
 
-4. **Mixed-case enforcement**: The `force_mixed()` function (lines 35-47) ensures at least one uppercase and one lowercase letter by toggling the first alpha character if needed - addresses legacy security requirements.
+4. **Mixed-case enforcement**: The `force_mixed()` function ensures at least one uppercase and one lowercase letter by toggling the first alpha character if needed - addresses legacy security requirements.
+
+5. **Data file location**: The `get_data_dir()` function (longpass.py:58-69) checks for package data first using `importlib.resources`, then falls back to `~/lib/longpass/` for backward compatibility.
 
 ## Development Commands
 
-### Installation
+### Installation with Poetry
+```bash
+# Install dependencies
+poetry install
+
+# Build the package
+poetry build
+
+# Install locally in development mode
+poetry install
+
+# Run the script via poetry
+poetry run longpass -c 3
+```
+
+### Installation with pip
+```bash
+# Install from source
+pip install .
+
+# Install in development mode
+pip install -e .
+```
+
+### Traditional Installation (Makefile)
 ```bash
 make install
 # Installs to ~/bin/longpass and ~/lib/longpass/*
@@ -43,36 +71,41 @@ make install
 ### Testing the Script
 ```bash
 # Basic test: generate default passphrases
-./longpass -c 3
+python3 longpass.py -c 3
 
 # Test pattern system
-./longpass -l  # list all patterns and wordlists
+python3 longpass.py -l  # list all patterns and wordlists
 
 # Test a specific pattern with custom wordlists
-./longpass -c 5 -p "a-b a-b" adj noun
+python3 longpass.py -c 5 -p "a-b a-b" adj noun
 
 # Test ruleset functionality
-./longpass -R  # list rulesets (requires ~/.longpass)
-./longpass -r spunky -c 3  # use a ruleset
+python3 longpass.py -R  # list rulesets (requires ~/.longpass)
+python3 longpass.py -r spunky -c 3  # use a ruleset
 
 # Test entropy calculation
-./longpass -e -c 5
+python3 longpass.py -e -c 5
 
 # Performance test
-time ./longpass -c 100000 eff5 > /dev/null
+time python3 longpass.py -c 100000 eff5 > /dev/null
 ```
 
 ### Code Patterns to Follow
 
 - Wordlists should contain one token per line, optionally with Diceware number prefix
-- Empty lines in wordlists are converted to single space (line 234)
-- All file paths use `os.path.join()` for cross-platform compatibility
-- The script looks ONLY in `~/lib/longpass/` for wordlists unless a dot is in the filename (lines 225-228)
+- Empty lines in wordlists are converted to single space
+- File paths use pathlib.Path for cross-platform compatibility
+- The script looks for wordlists in the `longpass_data` package first, then falls back to `~/lib/longpass/` for backward compatibility
+- Data files are included in the package via the `longpass_data` directory
 
 ## Important Notes
 
 - **Security**: Uses `secrets.choice()` for cryptographic randomness, NOT `random.choice()`
-- **Wordlist location**: Currently hardcoded to `~/lib/longpass/` - no search path support yet (see TODO on line 224)
-- **Pattern elements**: `collapse()` function (lines 23-32) concatenates non-space elements, allowing patterns like "aaaa" to pick 4 chars and join them
-- **Shuffle entropy**: When `-s` is used, additional entropy from permutations is calculated using multiset combinatorics (lines 243-250)
+- **Wordlist location**: Checks package data first (`longpass_data/`), then falls back to `~/lib/longpass/`
+- **Pattern elements**: `collapse()` function concatenates non-space elements, allowing patterns like "aaaa" to pick 4 chars and join them
+- **Shuffle entropy**: When `-s` is used, additional entropy from permutations is calculated using multiset combinatorics
 - **ConfigParser format**: The `~/.longpass` file uses INI-style sections with lowercase option names
+- **Package structure**:
+  - `longpass.py`: Main script with `main()` entry point
+  - `longpass_data/`: Python package containing all wordlist .txt files
+  - `pyproject.toml`: Poetry configuration defining packages and dependencies
